@@ -14,6 +14,7 @@ ny = 6
 dir = 'camera_cal'
 pattern = 'calibration*.jpg'
 calibration_file = 'wide_dist_pickle.p'
+show_image_interval = 0.3
 
 # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
 objp = np.zeros((nx * ny, 3), np.float32)
@@ -44,11 +45,12 @@ for file in images:
         # write_name = 'corners_found'+str(idx)+'.jpg'
         # cv2.imwrite(write_name, img)
         plt.imshow(img)
-        plt.pause(1)
+        plt.pause(show_image_interval)
+        plt.close()
     else:
         print('chessboard corners not found for ' + file)
 
-print('calibrating camera…')
+print('calibrating camera')
 
 # now let's calibrate the camera
 image_size = (1280, 720)
@@ -56,7 +58,7 @@ ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, image_s
 # save it to a file
 pickle.dump({'mtx': mtx, 'dist': dist}, open(calibration_file, 'wb'))
 
-print('showing undistorted images…')
+print('showing undistorted images')
 
 # check visually how undistorted images look like
 for file in images:
@@ -68,4 +70,5 @@ for file in images:
     ax2.imshow(undistorted)
     ax2.set_title('Undistorted Image', fontsize=30)
     plt.show()
-    plt.pause(1)
+    plt.pause(show_image_interval)
+    plt.close()
