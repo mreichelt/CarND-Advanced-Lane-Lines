@@ -39,7 +39,7 @@ def show_before_after(before, after, before_title='', after_title='', interval=s
     ax2.imshow(bgr2rgb(after))
     ax2.set_title(after_title, fontsize=30)
     if write_file:
-        plt.savefig('temp.jpg')
+        plt.savefig('temp/before_after.png')
     plt.show()
     plt.pause(interval)
     plt.close()
@@ -109,6 +109,16 @@ def pipeline(image):
     return cv2.bitwise_and(image, image, mask=cv2.convertScaleAbs(combined))
 
 
+def run_pipeline(video_file, duration=None):
+    """Runs pipeline on a video and writes it to temp folder"""
+    print('processing video file {}'.format(video_file))
+    clip = VideoFileClip(video_file)
+    if duration is not None:
+        clip = clip.set_duration(duration)
+    processed = clip.fl_image(pipeline)
+    processed.write_videofile('temp/' + video_file, audio=False)
+
+
 def main():
     plt.ion()
 
@@ -124,10 +134,9 @@ def main():
 
     # show_gray_image(pipeline(sample))
 
-    clip = VideoFileClip('project_video.mp4')
-    clip = clip.set_duration(5)
-    processed = clip.fl_image(pipeline)
-    processed.write_videofile('temp.mp4', audio=False)
+    video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
+    for video_file in video_files:
+        run_pipeline(video_file, duration=5)
 
 
 main()
