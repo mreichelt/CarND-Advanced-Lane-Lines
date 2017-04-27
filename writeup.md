@@ -61,7 +61,37 @@ In order to reuse the camera calibration later I stored the calibration data int
 #### 1. Provide an example of a distortion-corrected image.
 
 To demonstrate this step, I will describe how I apply the distortion correction to one of the test images like this one:
-![alt text][image2]
+![original and undistorted image](output_images/002_undistorted.png)
+
+The code is straight-forward. I wrote a function to load the first frame of a video and a function to undistort an image
+using the calibration data of the previously generated file:
+
+```python
+def load_first_image_of_video(video_file):
+    cap = cv2.VideoCapture(video_file)
+    ret, frame = cap.read()
+    if ret:
+        cap.release()
+        return frame
+    else:
+        exit('unable to read video ' + video_file)
+
+
+def load_camera_calibration(file='wide_dist_pickle.p'):
+    return pickle.load(open(file, 'rb'))
+
+
+def undistort(image, calibration):
+    return cv2.undistort(image, calibration['mtx'], calibration['dist'], None, calibration['mtx'])
+```
+
+Now I can undistort the image like this:
+
+```python
+calibration = load_camera_calibration()
+sample = load_first_image_of_video('project_video.mp4')
+undistorted = undistort(sample, calibration)
+```
 
 #### 2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
 

@@ -24,7 +24,8 @@ def show_before_after(before, after, before_title='', after_title='', interval=s
     ax1.set_title(before_title, fontsize=30)
     ax2.imshow(bgr2rgb(after))
     ax2.set_title(after_title, fontsize=30)
-    plt.savefig('temp.png')
+    if write_file:
+        plt.savefig('temp.jpg')
     plt.show()
     plt.pause(interval)
     plt.close()
@@ -53,7 +54,7 @@ def main():
     calibration = load_camera_calibration()
     sample = load_first_image_of_video('project_video.mp4')
     undistorted = undistort(sample, calibration)
-    show_before_after(sample, undistorted)
+    show_before_after(sample, undistorted, before_title='Original', after_title='Undistorted')
 
 
 main()
