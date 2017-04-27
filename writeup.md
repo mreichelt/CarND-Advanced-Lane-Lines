@@ -68,6 +68,7 @@ using the calibration data of the previously generated file:
 
 ```python
 def load_first_image_of_video(video_file):
+    """Returns the first image of a video"""
     cap = cv2.VideoCapture(video_file)
     ret, frame = cap.read()
     if ret:
@@ -78,10 +79,12 @@ def load_first_image_of_video(video_file):
 
 
 def load_camera_calibration(file='wide_dist_pickle.p'):
+    """Loads the camera calibration"""
     return pickle.load(open(file, 'rb'))
 
 
 def undistort(image, calibration):
+    """Corrects a distorted image"""
     return cv2.undistort(image, calibration['mtx'], calibration['dist'], None, calibration['mtx'])
 ```
 
