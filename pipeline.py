@@ -17,12 +17,14 @@ def show_cv2_image(image, interval=show_image_interval):
     plt.close()
 
 
-def show_before_after(before, after, before_title='', after_title='', interval=show_image_interval):
+def show_before_after(before, after, before_title='', after_title='', interval=show_image_interval, write_file=True):
+    plt.axis("off")
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
     ax1.imshow(bgr2rgb(before))
     ax1.set_title(before_title, fontsize=30)
     ax2.imshow(bgr2rgb(after))
     ax2.set_title(after_title, fontsize=30)
+    plt.savefig('temp.png')
     plt.show()
     plt.pause(interval)
     plt.close()
