@@ -102,12 +102,11 @@ def sobels_combine(gradx, grady, mag_binary, dir_binary):
     return combined
 
 
-# TODO: need to return different format for VideoFileClip processing
 def pipeline(image):
     undistorted = undistort(image)
     gradx, grady, binary_magnitude, binary_direction = sobels(undistorted)
     combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
-    return combined
+    return cv2.bitwise_and(image, image, mask=cv2.convertScaleAbs(combined))
 
 
 def main():
@@ -123,12 +122,12 @@ def main():
     # show_gray_image(binary_direction)
     # combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
 
-    show_gray_image(pipeline(sample))
+    # show_gray_image(pipeline(sample))
 
-    # clip = VideoFileClip('project_video.mp4')
-    # clip = clip.set_duration(1)
-    # processed = clip.fl_image(pipeline)
-    # processed.write_videofile('temp.mp4', audio=False)
+    clip = VideoFileClip('project_video.mp4')
+    clip = clip.set_duration(5)
+    processed = clip.fl_image(pipeline)
+    processed.write_videofile('temp.mp4', audio=False)
 
 
 main()
