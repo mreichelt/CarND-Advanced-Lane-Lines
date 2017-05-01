@@ -6,7 +6,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from moviepy.editor import VideoFileClip
 
-show_image_interval = 3
+show_image_interval = 1
+image_counter = 1
+
+
+def next_image_filename():
+    global image_counter
+    file = 'temp/{}.jpg'.format(image_counter)
+    image_counter += 1
+    return file
 
 
 def bgr2rgb(image):
@@ -51,22 +59,53 @@ def show_image(image, interval=show_image_interval):
         plt.imshow(bgr2rgb(image))
     else:
         plt.imshow(image, cmap='gray')
+
+    plt.savefig(next_image_filename())
     plt.pause(interval)
     plt.close()
 
 
-def show_before_after(before, after, before_title='', after_title='', interval=show_image_interval, write_file=True):
+def show_before_after(before, after, before_title='', after_title='', interval=show_image_interval):
     """Shows two images (before/after comparison) for a short interval and closes"""
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
     ax1.imshow(bgr2rgb(before))
     ax1.set_title(before_title, fontsize=30)
     ax2.imshow(bgr2rgb(after))
     ax2.set_title(after_title, fontsize=30)
-    if write_file:
-        plt.savefig('temp/before_after.png')
+
+    plt.savefig(next_image_filename())
     plt.show()
     plt.pause(interval)
     plt.close()
+
+
+def get_perspective_transform_src(image_width=1280, image_height=720):
+    top = 454
+    top_left = 588
+    top_right = 694
+    bottom_right = 1117
+    bottom_left = 194
+
+    vertices = np.float32([[
+        (bottom_left, image_height),  # bottom left
+        (top_left, top),  # top left
+        (top_right, top),  # top right
+        (bottom_right, image_height)  # bottom right
+    ]])
+    return vertices
+
+
+def get_perspective_transform_dst(image_width=1280, image_height=720):
+    left = 300
+    right = image_width - left
+
+    vertices = np.float32([[
+        (left, image_height),  # bottom left
+        (left, 0),  # top left
+        (right, 0),  # top right
+        (right, image_height)  # bottom right
+    ]])
+    return vertices
 
 
 def load_first_image_of_video(video_file):
@@ -125,8 +164,18 @@ def sobels_combine(gradx, grady, mag_binary, dir_binary):
     return combined
 
 
+def image_size(image):
+    return (image.shape[1], image.shape[0])
+
+
 def pipeline(image):
     undistorted = undistort(image)
+    # cv2.polylines(undistorted, get_perspective_transform_src().astype(int), True, (0, 0, 255), thickness=1)
+    M = cv2.getPerspectiveTransform(get_perspective_transform_src(), get_perspective_transform_dst())
+    warped = cv2.warpPerspective(undistorted, M, image_size(image), flags=cv2.INTER_LINEAR)
+    cv2.polylines(warped, get_perspective_transform_dst().astype(int), True, (0, 0, 255), thickness=1)
+    return warped
+
     saturation = bgr2saturation(undistorted)
     gradx, grady, binary_magnitude, binary_direction = sobels(saturation)
     combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
@@ -146,31 +195,16 @@ def run_pipeline(video_file, duration=None):
 def main():
     plt.ion()
 
-    images = glob.glob('test_images/test5.jpg')
+    images = glob.glob('test_images/straight_lines1.jpg')
 
     for image in images:
         image = cv2.imread(image)
-
-        # show_gray_image(bgr2hue(undistorted))
-        # show_gray_image(bgr2lightness(undistorted))
         show_image(pipeline(image))
-        show_image(bgr2gray(pipeline(image)))
-        show_image(bgr2saturation(image))
 
-        # gradx, grady, binary_magnitude, binary_direction = sobels(undistorted)
-        # show_cv2_image(undistorted)
-        # show_gray_image(gradx)
-        # show_gray_image(grady)
-        # show_gray_image(binary_magnitude)
-        # show_gray_image(binary_direction)
-        # combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
-
-        # show_gray_image(pipeline(sample))
-
-        # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
-        # video_files = ['project_video.mp4']
-        # for video_file in video_files:
-        #     run_pipeline(video_file, duration=5)
+    # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
+    # video_files = ['project_video.mp4']
+    # for video_file in video_files:
+    #     run_pipeline(video_file)
 
 
 main()
