@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from moviepy.editor import VideoFileClip
 
-show_image_interval = 1
+show_image_interval = 1.5
 image_counter = 1
 
 
@@ -132,54 +132,74 @@ def undistort(image, calibration=calibration_global):
     return cv2.undistort(image, calibration['mtx'], calibration['dist'], None, calibration['mtx'])
 
 
-def sobels(gray, sobel_kernel=15, thresh_x=(20, 100), thresh_y=(20, 100), thresh_mag=(30, 100), thresh_dir=(0.7, 1.3)):
+def abs_sobel_threshold(gray, orient='x', sobel_kernel=3, thresh=(0, 255)):
+    if orient == 'x':
+        abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel))
+    else:
+        abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel))
+
+    scaled = np.uint8(255 * abs_sobel / np.max(abs_sobel))
+    mask = np.zeros_like(scaled)
+    mask[(scaled >= thresh[0]) & (scaled <= thresh[1])] = 1
+    return mask
+
+
+def magnitude_treshold(gray, sobel_kernel=3, thresh=(0, 255)):
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    magnitude = np.sqrt(sobelx ** 2 + sobely ** 2)
 
-    abs_sobelx = np.absolute(sobelx)
-    abs_sobely = np.absolute(sobely)
-    magnitude = np.sqrt(np.square(sobelx) + np.square(sobely))
-
-    scaled_sobelx = np.uint8(255 * abs_sobelx / np.max(abs_sobelx))
-    scaled_sobely = np.uint8(255 * abs_sobely / np.max(abs_sobely))
-    scaled_magnitude = np.uint8(255 * magnitude / np.max(magnitude))
-    direction = np.arctan2(abs_sobely, abs_sobelx)
-
-    gradx = np.zeros_like(abs_sobelx)
-    grady = np.zeros_like(scaled_sobely)
-    binary_magnitude = np.zeros_like(scaled_magnitude)
-    binary_direction = np.zeros_like(direction)
-
-    gradx[(scaled_sobelx >= thresh_x[0]) & (scaled_sobelx < thresh_x[1])] = 1
-    grady[(scaled_sobely >= thresh_y[0]) & (scaled_sobely < thresh_y[1])] = 1
-    binary_magnitude[(scaled_magnitude >= thresh_mag[0]) & (scaled_magnitude < thresh_mag[1])] = 1
-    binary_direction[(direction >= thresh_dir[0]) & (direction < thresh_dir[1])] = 1
-
-    return gradx, grady, binary_magnitude, binary_direction
+    scaled = np.uint8(255 * magnitude / np.max(magnitude))
+    mask = np.zeros_like(scaled)
+    mask[(scaled >= thresh[0]) & (scaled <= thresh[1])] = 1
+    return mask
 
 
-def sobels_combine(gradx, grady, mag_binary, dir_binary):
-    combined = np.zeros_like(gradx)
-    combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1))] = 1
-    return combined
+def direction_treshold(gray, sobel_kernel=3, thresh=(0, np.pi / 2)):
+    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
+    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    direction = np.arctan2(np.absolute(sobely), np.absolute(sobelx))
+    mask = np.zeros_like(direction)
+    mask[(direction >= thresh[0]) & (direction <= thresh[1])] = 1
+    return mask
 
 
 def image_size(image):
     return (image.shape[1], image.shape[0])
 
 
+def mask1_and_mask2(mask1, mask2):
+    merged = np.zeros_like(mask1)
+    merged[(mask1 == 1) & (mask2 == 1)] = 1
+    return merged
+
+
+def mask1_or_mask2(mask1, mask2):
+    merged = np.zeros_like(mask1)
+    merged[(mask1 == 1) | (mask2 == 1)] = 1
+    return merged
+
+
 def pipeline(image):
     undistorted = undistort(image)
-    # cv2.polylines(undistorted, get_perspective_transform_src().astype(int), True, (0, 0, 255), thickness=1)
-    M = cv2.getPerspectiveTransform(get_perspective_transform_src(), get_perspective_transform_dst())
-    warped = cv2.warpPerspective(undistorted, M, image_size(image), flags=cv2.INTER_LINEAR)
-    cv2.polylines(warped, get_perspective_transform_dst().astype(int), True, (0, 0, 255), thickness=1)
-    return warped
+
+    red = bgr2red(undistorted)
+    magnitude_red = magnitude_treshold(red, thresh=(20, 100))
+    direction_red = direction_treshold(red, thresh=(0.7, 1.3))
+    red_mask = mask1_and_mask2(magnitude_red, direction_red)
 
     saturation = bgr2saturation(undistorted)
-    gradx, grady, binary_magnitude, binary_direction = sobels(saturation)
-    combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
-    return cv2.bitwise_and(image, image, mask=cv2.convertScaleAbs(combined))
+    magnitude_saturation = magnitude_treshold(saturation, thresh=(40, 100))
+    direction_saturation = direction_treshold(saturation, thresh=(0.7, 1.3))
+    saturation_mask = mask1_and_mask2(magnitude_saturation, direction_saturation)
+
+    mask = mask1_or_mask2(red_mask, saturation_mask)
+
+    # cv2.polylines(undistorted, get_perspective_transform_src().astype(int), True, (0, 0, 255), thickness=1)
+    M = cv2.getPerspectiveTransform(get_perspective_transform_src(), get_perspective_transform_dst())
+    warped = cv2.warpPerspective(mask, M, image_size(image), flags=cv2.INTER_LINEAR)
+
+    return warped
 
 
 def run_pipeline(video_file, duration=None):
@@ -195,16 +215,16 @@ def run_pipeline(video_file, duration=None):
 def main():
     plt.ion()
 
-    images = glob.glob('test_images/straight_lines1.jpg')
+    images = glob.glob('test_images/test5.jpg')
 
     for image in images:
         image = cv2.imread(image)
         show_image(pipeline(image))
 
-    # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
-    # video_files = ['project_video.mp4']
-    # for video_file in video_files:
-    #     run_pipeline(video_file)
+        # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
+        # video_files = ['project_video.mp4']
+        # for video_file in video_files:
+        #     run_pipeline(video_file)
 
 
 main()
