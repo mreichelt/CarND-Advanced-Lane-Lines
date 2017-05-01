@@ -1,10 +1,12 @@
-import numpy as np
-import cv2
+import glob
 import pickle
+
+import cv2
 import matplotlib.pyplot as plt
+import numpy as np
 from moviepy.editor import VideoFileClip
 
-show_image_interval = 1
+show_image_interval = 3
 
 
 def bgr2rgb(image):
@@ -12,21 +14,43 @@ def bgr2rgb(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 
+def bgr2red(image):
+    return image[:, :, 2]
+
+
+def bgr2green(image):
+    return image[:, :, 1]
+
+
+def bgr2blue(image):
+    return image[:, :, 0]
+
+
+def bgr2hue(image):
+    hls = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
+    return hls[:, :, 0]
+
+
+def bgr2lightness(image):
+    hls = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
+    return hls[:, :, 1]
+
+
+def bgr2saturation(image):
+    hls = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
+    return hls[:, :, 2]
+
+
 def bgr2gray(image):
     """Converts a BGR image to gray"""
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 
-def show_cv2_image(image, interval=show_image_interval, cmap=None):
-    """Shows an image for a short interval and closes"""
-    plt.imshow(bgr2rgb(image), cmap=cmap)
-    plt.pause(interval)
-    plt.close()
-
-
-def show_gray_image(gray, interval=show_image_interval):
-    """Shows a gray image for a short interval and closes"""
-    plt.imshow(gray, cmap='gray')
+def show_image(image, interval=show_image_interval):
+    if len(image.shape) == 3 and image.shape[2] == 3:
+        plt.imshow(bgr2rgb(image))
+    else:
+        plt.imshow(image, cmap='gray')
     plt.pause(interval)
     plt.close()
 
@@ -69,8 +93,7 @@ def undistort(image, calibration=calibration_global):
     return cv2.undistort(image, calibration['mtx'], calibration['dist'], None, calibration['mtx'])
 
 
-def sobels(image, sobel_kernel=15, thresh_x=(20, 100), thresh_y=(20, 100), thresh_mag=(30, 100), thresh_dir=(0.7, 1.3)):
-    gray = bgr2gray(image)
+def sobels(gray, sobel_kernel=15, thresh_x=(20, 100), thresh_y=(20, 100), thresh_mag=(30, 100), thresh_dir=(0.7, 1.3)):
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
 
@@ -104,7 +127,8 @@ def sobels_combine(gradx, grady, mag_binary, dir_binary):
 
 def pipeline(image):
     undistorted = undistort(image)
-    gradx, grady, binary_magnitude, binary_direction = sobels(undistorted)
+    saturation = bgr2saturation(undistorted)
+    gradx, grady, binary_magnitude, binary_direction = sobels(saturation)
     combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
     return cv2.bitwise_and(image, image, mask=cv2.convertScaleAbs(combined))
 
@@ -122,21 +146,31 @@ def run_pipeline(video_file, duration=None):
 def main():
     plt.ion()
 
-    sample = load_first_image_of_video('project_video.mp4')
-    # undistorted = undistort(sample)
-    # gradx, grady, binary_magnitude, binary_direction = sobels(undistorted)
-    # show_cv2_image(undistorted)
-    # show_gray_image(gradx)
-    # show_gray_image(grady)
-    # show_gray_image(binary_magnitude)
-    # show_gray_image(binary_direction)
-    # combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
+    images = glob.glob('test_images/test5.jpg')
 
-    # show_gray_image(pipeline(sample))
+    for image in images:
+        image = cv2.imread(image)
 
-    video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
-    for video_file in video_files:
-        run_pipeline(video_file, duration=5)
+        # show_gray_image(bgr2hue(undistorted))
+        # show_gray_image(bgr2lightness(undistorted))
+        show_image(pipeline(image))
+        show_image(bgr2gray(pipeline(image)))
+        show_image(bgr2saturation(image))
+
+        # gradx, grady, binary_magnitude, binary_direction = sobels(undistorted)
+        # show_cv2_image(undistorted)
+        # show_gray_image(gradx)
+        # show_gray_image(grady)
+        # show_gray_image(binary_magnitude)
+        # show_gray_image(binary_direction)
+        # combined = sobels_combine(gradx, grady, binary_magnitude, binary_direction)
+
+        # show_gray_image(pipeline(sample))
+
+        # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
+        # video_files = ['project_video.mp4']
+        # for video_file in video_files:
+        #     run_pipeline(video_file, duration=5)
 
 
 main()
