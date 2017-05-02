@@ -441,8 +441,8 @@ def run_pipeline(video_file, duration=None, end=False):
 def main():
     plt.ion()
 
-    do_images = True
-    do_videos = False
+    do_images = False
+    do_videos = True
 
     if do_images:
         images = glob.glob('test_images/*.jpg')
