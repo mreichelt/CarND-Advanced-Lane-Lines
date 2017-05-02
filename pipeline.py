@@ -84,6 +84,7 @@ def get_perspective_transform_src(image_width=1280, image_height=720):
     top_right = 694
     bottom_right = 1117
     bottom_left = 194
+    height = image_height - top
 
     vertices = np.float32([[
         (bottom_left, image_height),  # bottom left
@@ -91,7 +92,7 @@ def get_perspective_transform_src(image_width=1280, image_height=720):
         (top_right, top),  # top right
         (bottom_right, image_height)  # bottom right
     ]])
-    return vertices
+    return vertices, height
 
 
 def get_perspective_transform_dst(image_width=1280, image_height=720):
@@ -203,46 +204,47 @@ class Line():
         # y values for detected line pixels
         self.ally = None
 
+    def get_poly(self):
+        return self.current_fit[0] * self.ally ** 2 + self.current_fit[1] * self.ally + self.current_fit[2]
 
-def detect_lines(binary_warped):
+    def set_radius(self):
+        return
+
+
+def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_recenter=50):
     left = Line()
     right = Line()
 
     height = binary_warped.shape[0]
+    width = binary_warped.shape[1]
     histogram = np.sum(binary_warped[int(height / 2):, :], axis=0)
+    histogram_height = histogram.shape[0]
+    window_height = np.int(height / n_windows)
 
     # Create an output image to draw on and  visualize the result
     # out_img = np.dstack((binary_warped, binary_warped, binary_warped)) * 255
 
     # Find the peak of the left and right halves of the histogram
     # These will be the starting point for the left and right lines
-    histogram_height = histogram.shape[0]
     midpoint = np.int(histogram_height / 2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
 
-    # Choose the number of sliding windows
-    nwindows = 9
-
-    # Set height of windows
-    window_height = np.int(height / nwindows)
     # Identify the x and y positions of all nonzero pixels in the image
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
+
     # Current positions to be updated for each window
     leftx_current = leftx_base
     rightx_current = rightx_base
-    # Set the width of the windows +/- margin
-    margin = 100
-    # Set minimum number of pixels found to recenter window
-    minpix = 50
+
     # Create empty lists to receive left and right lane pixel indices
     left_lane_inds = []
     right_lane_inds = []
 
     # Step through the windows one by one
-    for window in range(nwindows):
+    for window in range(n_windows):
         # Identify window boundaries in x and y (and right and left)
         win_y_low = height - (window + 1) * window_height
         win_y_high = height - window * window_height
@@ -269,9 +271,9 @@ def detect_lines(binary_warped):
         right_lane_inds.append(good_right_inds)
 
         # If you found > minpix pixels, recenter next window on their mean position
-        if len(good_left_inds) > minpix:
+        if len(good_left_inds) > minpix_recenter:
             leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
-        if len(good_right_inds) > minpix:
+        if len(good_right_inds) > minpix_recenter:
             rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
 
     # Concatenate the arrays of indices
@@ -285,14 +287,14 @@ def detect_lines(binary_warped):
     righty = nonzeroy[right_lane_inds]
 
     # Fit a second order polynomial to each
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
+    left.current_fit = np.polyfit(lefty, leftx, 2)
+    right.current_fit = np.polyfit(righty, rightx, 2)
 
     # Generate x and y values for plotting
     ally = np.linspace(0, height - 1, height)
     left.ally = right.ally = ally
-    left.allx = left_fit[0] * ally ** 2 + left_fit[1] * ally + left_fit[2]
-    right.allx = right_fit[0] * ally ** 2 + right_fit[1] * ally + right_fit[2]
+    left.allx = left.get_poly()
+    right.allx = right.get_poly()
 
     # out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
     # out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
@@ -300,17 +302,20 @@ def detect_lines(binary_warped):
     y_eval = np.max(ally)
 
     # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 50 / 720  # meters per pixel in y dimension
+    ym_per_pix = 30 / warp_height  # meters per pixel in y dimension
     xm_per_pix = 3.7 / 700  # meters per pixel in x dimension
+
+    left.line_base_pos = (width / 2 - leftx_base) * xm_per_pix
+    right.line_base_pos = (rightx_base - width / 2) * xm_per_pix
 
     # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(ally * ym_per_pix, left.allx * xm_per_pix, 2)
     right_fit_cr = np.polyfit(ally * ym_per_pix, right.allx * xm_per_pix, 2)
     # Calculate the new radii of curvature
     left.radius_of_curvature = ((1 + (2 * left_fit_cr[0] * y_eval * ym_per_pix + left_fit_cr[1]) ** 2) ** 1.5) \
-                    / np.absolute(2 * left_fit_cr[0])
+                               / np.absolute(2 * left_fit_cr[0])
     right.radius_of_curvature = ((1 + (2 * right_fit_cr[0] * y_eval * ym_per_pix + right_fit_cr[1]) ** 2) ** 1.5) \
-                     / np.absolute(2 * right_fit_cr[0])
+                                / np.absolute(2 * right_fit_cr[0])
 
     # plt.imshow(out_img)
     # plt.plot(left_fitx, ploty, color='yellow')
@@ -337,11 +342,13 @@ def pipeline(image):
 
     mask = mask1_or_mask2(red_mask, saturation_mask)
 
-    M = cv2.getPerspectiveTransform(get_perspective_transform_src(), get_perspective_transform_dst())
-    Minv = cv2.getPerspectiveTransform(get_perspective_transform_dst(), get_perspective_transform_src())
+    src, src_height = get_perspective_transform_src()
+    dst = get_perspective_transform_dst()
+    M = cv2.getPerspectiveTransform(src, dst)
+    Minv = cv2.getPerspectiveTransform(dst, src)
     binary_warped = cv2.warpPerspective(mask, M, image_size(image), flags=cv2.INTER_LINEAR)
 
-    left, right = detect_lines(binary_warped)
+    left, right = detect_lines(binary_warped, warp_height=src_height)
 
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(binary_warped).astype(np.uint8)
@@ -363,7 +370,10 @@ def pipeline(image):
     # draw radius on image
     font = cv2.FONT_HERSHEY_SIMPLEX
     radius = (left.radius_of_curvature + right.radius_of_curvature) / 2
-    cv2.putText(result, 'radius: {:5.2f}km'.format(radius / 1000), (10, 50),
+    cv2.putText(result, 'radius: {:5.2f}km'.format(radius / 1000), (10, 30),
+                font, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    center_distance = (right.line_base_pos - left.line_base_pos) / 2
+    cv2.putText(result, 'distance from center: {:5.2f}m'.format(center_distance), (10, 60),
                 font, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
     return result
