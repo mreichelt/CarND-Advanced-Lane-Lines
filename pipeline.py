@@ -1,3 +1,4 @@
+import glob
 import pickle
 
 import cv2
@@ -241,7 +242,7 @@ class LineHistory:
         return line
 
 
-def detect_lines(binary_warped, warp_height, n_windows=6, margin=100, minpix_recenter=50):
+def detect_lines(binary_warped, n_windows=6, margin=100, minpix_recenter=50):
     left = Line()
     right = Line()
 
@@ -357,10 +358,27 @@ def detect_lines(binary_warped, warp_height, n_windows=6, margin=100, minpix_rec
     return left, right
 
 
+def get_line_mask(undistorted):
+    red = bgr2red(undistorted)
+    magnitude_red = magnitude_treshold(red, thresh=(20, 100))
+    direction_red = direction_treshold(red, thresh=(0.7, 1.3))
+    red_mask = mask1_and_mask2(magnitude_red, direction_red)
+
+    saturation = bgr2saturation(undistorted)
+    magnitude_saturation = magnitude_treshold(saturation, thresh=(40, 100))
+    direction_saturation = direction_treshold(saturation, thresh=(0.7, 1.3))
+    saturation_mask = mask1_and_mask2(magnitude_saturation, direction_saturation)
+
+    mask = mask1_or_mask2(red_mask, saturation_mask)
+
+    return mask
+
+
 def pipeline(image, line_history: LineHistory):
     undistorted = undistort(image)
 
     mask = get_line_mask(undistorted)
+    return mask
 
     src, src_height = get_perspective_transform_src()
     dst = get_perspective_transform_dst()
@@ -370,7 +388,7 @@ def pipeline(image, line_history: LineHistory):
     binary_warped = cv2.warpPerspective(mask, M, img_size, flags=cv2.INTER_LINEAR)
 
     # detect the lines in warped mode
-    left, right = detect_lines(binary_warped, warp_height=src_height)
+    left, right = detect_lines(binary_warped)
 
     # now, lets get a smooth value over the history of lines
     line_history.append(left, right)
@@ -405,19 +423,6 @@ def pipeline(image, line_history: LineHistory):
     return result
 
 
-def get_line_mask(undistorted):
-    red = bgr2red(undistorted)
-    magnitude_red = magnitude_treshold(red, thresh=(20, 100))
-    direction_red = direction_treshold(red, thresh=(0.7, 1.3))
-    red_mask = mask1_and_mask2(magnitude_red, direction_red)
-    saturation = bgr2saturation(undistorted)
-    magnitude_saturation = magnitude_treshold(saturation, thresh=(40, 100))
-    direction_saturation = direction_treshold(saturation, thresh=(0.7, 1.3))
-    saturation_mask = mask1_and_mask2(magnitude_saturation, direction_saturation)
-    mask = mask1_or_mask2(red_mask, saturation_mask)
-    return mask
-
-
 def run_pipeline(video_file, duration=None, end=False):
     """Runs pipeline on a video and writes it to temp folder"""
     print('processing video file {}'.format(video_file))
@@ -437,19 +442,22 @@ def run_pipeline(video_file, duration=None, end=False):
 def main():
     plt.ion()
 
-    # images = glob.glob('test_images/*.jpg')
-    #
-    # for image in images:
-    #     image = cv2.imread(image)
-    #     show_image(pipeline(image))
+    do_images = True
+    do_videos = False
 
-    print('encoding video')
+    if do_images:
+        images = glob.glob('test_images/*.jpg')
 
-    # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
-    video_files = ['project_video.mp4']
-    for video_file in video_files:
-        run_pipeline(video_file)
-        # run_pipeline(video_file, duration=14, end=True)
+        for image in images:
+            image = cv2.imread(image)
+            show_image(pipeline(image, LineHistory()))
+
+    if do_videos:
+        # video_files = ['project_video.mp4', 'challenge_video.mp4', 'harder_challenge_video.mp4']
+        video_files = ['project_video.mp4']
+        for video_file in video_files:
+            run_pipeline(video_file)
+            # run_pipeline(video_file, duration=14, end=True)
 
 
 main()

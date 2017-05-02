@@ -98,15 +98,43 @@ undistorted = undistort(sample, calibration)
 
 #### 2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
 
-I used a combination of color and gradient thresholds to generate a binary image (thresholding steps at lines # through # in `another_file.py`).  Here's an example of my output for this step.  (note: this is not actually from one of the test images)
+By visualizing the test images in all 6 channels of the RGB and HLS color formats, I found out that the most useful
+channels would be red and green of RGB and the saturation channel of HLS. I decided to use the red and saturation channels to
+move forward. Due to how OpenCV handles images I had to spend extra care on the order of the colors, which is BGR in OpenCV.
+ 
+I computed the magnitude gradient `np.sqrt(sobelx ** 2 + sobely ** 2)` and combined it with the gradient direction `np.sqrt(np.square(sobelx) + np.square(sobely))`, of which I selected certain thresholds - similarly for both the red and saturation channels:
 
-![alt text][image3]
+```python
+def get_line_mask(undistorted):
+    red = bgr2red(undistorted)
+    magnitude_red = magnitude_treshold(red, thresh=(20, 100))
+    direction_red = direction_treshold(red, thresh=(0.7, 1.3))
+    red_mask = mask1_and_mask2(magnitude_red, direction_red)
+
+    saturation = bgr2saturation(undistorted)
+    magnitude_saturation = magnitude_treshold(saturation, thresh=(40, 100))
+    direction_saturation = direction_treshold(saturation, thresh=(0.7, 1.3))
+    saturation_mask = mask1_and_mask2(magnitude_saturation, direction_saturation)
+    
+    mask = mask1_or_mask2(red_mask, saturation_mask)
+
+    return mask
+```
+
+Here are some examples of how the final binary mask looks like:
+
+![mask 1](output_images/003_mask_1.jpg)
+![mask 2](output_images/003_mask_2.jpg)
+![mask 3](output_images/003_mask_3.jpg)
+
 
 #### 3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
+
+
 The code for my perspective transform includes a function called `warper()`, which appears in lines 1 through 8 in the file `example.py` (output_images/examples/example.py) (or, for example, in the 3rd code cell of the IPython notebook).  The `warper()` function takes as inputs an image (`img`), as well as source (`src`) and destination (`dst`) points.  I chose the hardcode the source and destination points in the following manner:
 
-```
+```python
 src = np.float32(
     [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
     [((img_size[0] / 6) - 10), img_size[1]],
