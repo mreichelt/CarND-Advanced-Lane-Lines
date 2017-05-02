@@ -288,5 +288,52 @@ Here's a [link to my video result](./project_video_detected_lanes.mp4).
 
 #### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+My biggest issue with this project was deciding which color channels to use and especially which features of the gradients
+I should pick for creating the mask. There are absolute x and y gradients, the magnitude and the gradient direction, and their
+parameters to choose from: Minimum and maximum thresholds as well as Sobel kernel size. Finally, these can be combined in
+even more ways. After playing around only with the saturation I decided to use both the red and the saturation channel,
+and stick to gradient magnitude and direction. The created masks still contained a lot of noise. This problem alone –
+deciding where the lines are in an image – is something where I would like to apply more power, i.e. using machine
+learning.
 
+All the other parts of the project were pretty much straightforward:
+
+- Camera Calibration
+- Removing distortion from original image
+- Warping into birds-eye view
+- Histogram and Sliding Window algorithm
+- Fitting the polynomials
+- Calculating curve radius / distance from center
+- Drawing lane & warping back
+
+Not so straightforward was taking the `Line` class template from Udacity and applying it to the project.
+This involved quite some refactoring of the sliding window algorithm.
+
+Also, I decided to smooth the lane over multiple frames. My issue here was finding out how to apply the same
+`LineHistory` object to multiple calls of my `pipeline` method from a `VideoFileClip`. Here is how I did it:
+
+```python
+def run_pipeline(video_file):
+    clip = VideoFileClip(video_file)
+    line_history = LineHistory()
+    
+    # My trick: use fl instead of fl_image to pass custom lambda with same history object
+    processed = clip.fl(lambda gf, t: pipeline(gf(t), line_history), [])
+    processed.write_videofile('temp/' + video_file, audio=False)
+```
+
+---
+
+Due to the use of OpenCV and lots of assumptions on the input data my pipeline will likely fail on the following cases:
+
+- Some street borders might be mistaken as a line
+- Basically everything near to the lines that is detected by the mask might be mistaken as lines
+- Passing vehicles
+- Very tight curves
+- Driving over a line
+
+To improve this I would try some of the following techniques:
+
+- Improve mask creation, maybe using a threshold on the actual red or saturation values (other than just the gradient)
+- Use different algorithm for line detection than sliding window (which might fail for very tight curves)
+- Use machine learning for line detection
