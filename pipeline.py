@@ -181,7 +181,7 @@ def mask1_or_mask2(mask1, mask2):
 
 
 # Define a class to receive the characteristics of each line detection
-class Line():
+class Line:
     def __init__(self):
         # was the line detected in the last iteration?
         self.detected = False
@@ -207,18 +207,48 @@ class Line():
     def get_poly(self):
         return self.current_fit[0] * self.ally ** 2 + self.current_fit[1] * self.ally + self.current_fit[2]
 
-    def set_radius(self):
-        return
+    def update(self, current_fit, line_base_pos, radius_of_curvature, img_size):
+        self.current_fit = current_fit
+        self.line_base_pos = line_base_pos
+        self.radius_of_curvature = radius_of_curvature
+        self.ally = np.linspace(0, img_size[1] - 1, img_size[1])
+        self.allx = self.get_poly()
 
 
-def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_recenter=50):
+class LineHistory:
+    def __init__(self, n=10):
+        self.n = n
+        self.left_lines = []
+        self.right_lines = []
+
+    def append(self, left: Line, right: Line):
+        self.left_lines.append(left)
+        self.right_lines.append(right)
+
+    def take_last(self):
+        return self.left_lines[-self.n:], self.right_lines[-self.n:]
+
+    def averages(self, img_size):
+        left_lines, right_lines = self.take_last()
+        return self.line_average(left_lines, img_size), self.line_average(right_lines, img_size)
+
+    def line_average(self, lines, img_size):
+        line = Line()
+        current_fit = np.average([line.current_fit for line in lines], axis=0)
+        line_base_pos = np.average([line.line_base_pos for line in lines])
+        radius_of_curvature = np.average([line.radius_of_curvature for line in lines])
+        line.update(current_fit, line_base_pos, radius_of_curvature, img_size)
+        return line
+
+
+def detect_lines(binary_warped, warp_height, n_windows=6, margin=100, minpix_recenter=50):
     left = Line()
     right = Line()
 
     height = binary_warped.shape[0]
     width = binary_warped.shape[1]
     histogram = np.sum(binary_warped[int(height / 2):, :], axis=0)
-    histogram_height = histogram.shape[0]
+    histogram_width = histogram.shape[0]
     window_height = np.int(height / n_windows)
 
     # Create an output image to draw on and  visualize the result
@@ -226,7 +256,7 @@ def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_rec
 
     # Find the peak of the left and right halves of the histogram
     # These will be the starting point for the left and right lines
-    midpoint = np.int(histogram_height / 2)
+    midpoint = np.int(histogram_width / 2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
 
@@ -240,8 +270,8 @@ def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_rec
     rightx_current = rightx_base
 
     # Create empty lists to receive left and right lane pixel indices
-    left_lane_inds = []
-    right_lane_inds = []
+    left_lane_indices = []
+    right_lane_indices = []
 
     # Step through the windows one by one
     for window in range(n_windows):
@@ -258,33 +288,33 @@ def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_rec
         # cv2.rectangle(out_img, (win_xright_low, win_y_low), (win_xright_high, win_y_high), (0, 255, 0), 2)
 
         # Identify the nonzero pixels in x and y within the window
-        good_left_inds = ((nonzeroy >= win_y_low)
-                          & (nonzeroy < win_y_high)
-                          & (nonzerox >= win_xleft_low)
-                          & (nonzerox < win_xleft_high)).nonzero()[0]
-        good_right_inds = ((nonzeroy >= win_y_low)
-                           & (nonzeroy < win_y_high)
-                           & (nonzerox >= win_xright_low)
-                           & (nonzerox < win_xright_high)).nonzero()[0]
+        good_left_indices = ((nonzeroy >= win_y_low)
+                             & (nonzeroy < win_y_high)
+                             & (nonzerox >= win_xleft_low)
+                             & (nonzerox < win_xleft_high)).nonzero()[0]
+        good_right_indices = ((nonzeroy >= win_y_low)
+                              & (nonzeroy < win_y_high)
+                              & (nonzerox >= win_xright_low)
+                              & (nonzerox < win_xright_high)).nonzero()[0]
         # Append these indices to the lists
-        left_lane_inds.append(good_left_inds)
-        right_lane_inds.append(good_right_inds)
+        left_lane_indices.append(good_left_indices)
+        right_lane_indices.append(good_right_indices)
 
         # If you found > minpix pixels, recenter next window on their mean position
-        if len(good_left_inds) > minpix_recenter:
-            leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
-        if len(good_right_inds) > minpix_recenter:
-            rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
+        if len(good_left_indices) > minpix_recenter:
+            leftx_current = np.int(np.mean(nonzerox[good_left_indices]))
+        if len(good_right_indices) > minpix_recenter:
+            rightx_current = np.int(np.mean(nonzerox[good_right_indices]))
 
     # Concatenate the arrays of indices
-    left_lane_inds = np.concatenate(left_lane_inds)
-    right_lane_inds = np.concatenate(right_lane_inds)
+    left_lane_indices = np.concatenate(left_lane_indices)
+    right_lane_indices = np.concatenate(right_lane_indices)
 
     # Extract left and right line pixel positions
-    leftx = nonzerox[left_lane_inds]
-    lefty = nonzeroy[left_lane_inds]
-    rightx = nonzerox[right_lane_inds]
-    righty = nonzeroy[right_lane_inds]
+    leftx = nonzerox[left_lane_indices]
+    lefty = nonzeroy[left_lane_indices]
+    rightx = nonzerox[right_lane_indices]
+    righty = nonzeroy[right_lane_indices]
 
     # Fit a second order polynomial to each
     left.current_fit = np.polyfit(lefty, leftx, 2)
@@ -302,7 +332,7 @@ def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_rec
     y_eval = np.max(ally)
 
     # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30 / warp_height  # meters per pixel in y dimension
+    ym_per_pix = 30 / 720  # meters per pixel in y dimension
     xm_per_pix = 3.7 / 700  # meters per pixel in x dimension
 
     left.line_base_pos = (width / 2 - leftx_base) * xm_per_pix
@@ -327,36 +357,32 @@ def detect_lines(binary_warped, warp_height, n_windows=9, margin=100, minpix_rec
     return left, right
 
 
-def pipeline(image):
+def pipeline(image, line_history: LineHistory):
     undistorted = undistort(image)
 
-    red = bgr2red(undistorted)
-    magnitude_red = magnitude_treshold(red, thresh=(20, 100))
-    direction_red = direction_treshold(red, thresh=(0.7, 1.3))
-    red_mask = mask1_and_mask2(magnitude_red, direction_red)
-
-    saturation = bgr2saturation(undistorted)
-    magnitude_saturation = magnitude_treshold(saturation, thresh=(40, 100))
-    direction_saturation = direction_treshold(saturation, thresh=(0.7, 1.3))
-    saturation_mask = mask1_and_mask2(magnitude_saturation, direction_saturation)
-
-    mask = mask1_or_mask2(red_mask, saturation_mask)
+    mask = get_line_mask(undistorted)
 
     src, src_height = get_perspective_transform_src()
     dst = get_perspective_transform_dst()
     M = cv2.getPerspectiveTransform(src, dst)
     Minv = cv2.getPerspectiveTransform(dst, src)
-    binary_warped = cv2.warpPerspective(mask, M, image_size(image), flags=cv2.INTER_LINEAR)
+    img_size = image_size(image)
+    binary_warped = cv2.warpPerspective(mask, M, img_size, flags=cv2.INTER_LINEAR)
 
+    # detect the lines in warped mode
     left, right = detect_lines(binary_warped, warp_height=src_height)
+
+    # now, lets get a smooth value over the history of lines
+    line_history.append(left, right)
+    left_average, right_average = line_history.averages(img_size)
 
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(binary_warped).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
     # Recast the x and y points into usable format for cv2.fillPoly()
-    pts_left = np.array([np.transpose(np.vstack([left.allx, left.ally]))])
-    pts_right = np.array([np.flipud(np.transpose(np.vstack([right.allx, right.ally])))])
+    pts_left = np.array([np.transpose(np.vstack([left_average.allx, left_average.ally]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_average.allx, right_average.ally])))])
     pts = np.hstack((pts_left, pts_right))
 
     # Draw the lane onto the warped blank image
@@ -367,25 +393,44 @@ def pipeline(image):
     # Combine the result with the original image
     result = cv2.addWeighted(undistorted, 1, newwarp, 0.3, 0)
 
-    # draw radius on image
+    # draw radius + distance from center on image
     font = cv2.FONT_HERSHEY_SIMPLEX
-    radius = (left.radius_of_curvature + right.radius_of_curvature) / 2
+    radius = (left_average.radius_of_curvature + right_average.radius_of_curvature) / 2
     cv2.putText(result, 'radius: {:5.2f}km'.format(radius / 1000), (10, 30),
                 font, 1, (255, 255, 255), 2, cv2.LINE_AA)
-    center_distance = (right.line_base_pos - left.line_base_pos) / 2
+    center_distance = (right_average.line_base_pos - left_average.line_base_pos) / 2
     cv2.putText(result, 'distance from center: {:5.2f}m'.format(center_distance), (10, 60),
                 font, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
     return result
 
 
-def run_pipeline(video_file, duration=None):
+def get_line_mask(undistorted):
+    red = bgr2red(undistorted)
+    magnitude_red = magnitude_treshold(red, thresh=(20, 100))
+    direction_red = direction_treshold(red, thresh=(0.7, 1.3))
+    red_mask = mask1_and_mask2(magnitude_red, direction_red)
+    saturation = bgr2saturation(undistorted)
+    magnitude_saturation = magnitude_treshold(saturation, thresh=(40, 100))
+    direction_saturation = direction_treshold(saturation, thresh=(0.7, 1.3))
+    saturation_mask = mask1_and_mask2(magnitude_saturation, direction_saturation)
+    mask = mask1_or_mask2(red_mask, saturation_mask)
+    return mask
+
+
+def run_pipeline(video_file, duration=None, end=False):
     """Runs pipeline on a video and writes it to temp folder"""
     print('processing video file {}'.format(video_file))
     clip = VideoFileClip(video_file)
+
     if duration is not None:
-        clip = clip.set_duration(duration)
-    processed = clip.fl_image(pipeline)
+        if end:
+            clip = clip.subclip(clip.duration - duration)
+        else:
+            clip = clip.subclip(0, duration)
+
+    line_history = LineHistory()
+    processed = clip.fl(lambda gf, t: pipeline(gf(t), line_history), [])
     processed.write_videofile('temp/' + video_file, audio=False)
 
 
@@ -404,6 +449,7 @@ def main():
     video_files = ['project_video.mp4']
     for video_file in video_files:
         run_pipeline(video_file)
+        # run_pipeline(video_file, duration=14, end=True)
 
 
 main()
