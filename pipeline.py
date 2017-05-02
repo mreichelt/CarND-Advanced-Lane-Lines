@@ -378,7 +378,6 @@ def pipeline(image, line_history: LineHistory):
     undistorted = undistort(image)
 
     mask = get_line_mask(undistorted)
-    return mask
 
     src, src_height = get_perspective_transform_src()
     dst = get_perspective_transform_dst()

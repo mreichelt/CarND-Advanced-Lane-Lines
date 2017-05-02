@@ -130,41 +130,80 @@ Here are some examples of how the final binary mask looks like:
 
 #### 3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
+In order to perform a perspective transformation I took the undistorted image of [straight_lines1.jpg](test_images/straight_lines1.jpg)
+and opened it in GIMP to select the edges of a polygon. I then drew it on the image using OpenCV to visually check whether the polygon
+was correctly placed around the lines.
 
-
-The code for my perspective transform includes a function called `warper()`, which appears in lines 1 through 8 in the file `example.py` (output_images/examples/example.py) (or, for example, in the 3rd code cell of the IPython notebook).  The `warper()` function takes as inputs an image (`img`), as well as source (`src`) and destination (`dst`) points.  I chose the hardcode the source and destination points in the following manner:
+Then I warped the image using the following code:
 
 ```python
-src = np.float32(
-    [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
-    [((img_size[0] / 6) - 10), img_size[1]],
-    [(img_size[0] * 5 / 6) + 60, img_size[1]],
-    [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
-dst = np.float32(
-    [[(img_size[0] / 4), 0],
-    [(img_size[0] / 4), img_size[1]],
-    [(img_size[0] * 3 / 4), img_size[1]],
-    [(img_size[0] * 3 / 4), 0]])
+def get_perspective_transform_src(image_width=1280, image_height=720):
+    top = 454
+    top_left = 588
+    top_right = 694
+    bottom_right = 1117
+    bottom_left = 194
+    height = image_height - top
 
+    vertices = np.float32([[
+        (bottom_left, image_height),  # bottom left
+        (top_left, top),  # top left
+        (top_right, top),  # top right
+        (bottom_right, image_height)  # bottom right
+    ]])
+    return vertices, height
+
+
+def get_perspective_transform_dst(image_width=1280, image_height=720):
+    left = 300
+    right = image_width - left
+
+    vertices = np.float32([[
+        (left, image_height),  # bottom left
+        (left, 0),  # top left
+        (right, 0),  # top right
+        (right, image_height)  # bottom right
+    ]])
+    return vertices
+    
+
+
+# …later in pipeline function:
+    src, src_height = get_perspective_transform_src()
+    dst = get_perspective_transform_dst()
+    M = cv2.getPerspectiveTransform(src, dst)
+    # matrix used for warping back
+    Minv = cv2.getPerspectiveTransform(dst, src)
+    img_size = image_size(image)
+    warped = cv2.warpPerspective(mask, M, img_size, flags=cv2.INTER_LINEAR)
 ```
-This resulted in the following source and destination points:
 
-| Source        | Destination   | 
-|:-------------:|:-------------:| 
-| 585, 460      | 320, 0        | 
-| 203, 720      | 320, 720      |
-| 1127, 720     | 960, 720      |
-| 695, 460      | 960, 0        |
+I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image
+and its warped counterpart to verify that the lines appear parallel in the warped image.
 
-I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image and its warped counterpart to verify that the lines appear parallel in the warped image.
+![warping](output_images/004_warp.jpg)
 
-![alt text][image4]
+And here is how the mask was transformed:
+
+![warped binary mask](output_images/004_warp_mask.jpg)
 
 #### 4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
 
-Then I did some other stuff and fit my lane lines with a 2nd order polynomial kinda like this:
+Using a histogram of the lower part of the warped image, I identified where the lane lines as peaks of a histogram:
 
-![alt text][image5]
+![histogram](output_images/005_histogram.png)
+
+Using a sliding window approach, starting at the bottom of the image, I selected one window for each peak. Then I moved
+the window to the next position nearby where the binary mask matched. That way I found the (x,y) pairs of pixels
+belonging to the left and the right line. Using `np.polyfit(y, x, 2)` I then could fit a 2nd degree polynomial to the
+points.
+The code can be found in the `detect_lines` function in [pipeline.py](pipeline.py).
+
+Here are three examples (sliding windows green, left line pixels blue, right line pixels red, fitted polynomials yellow):
+
+![sliding window 1](output_images/006_sliding_1.jpg)
+![sliding window 2](output_images/006_sliding_2.jpg)
+![sliding window 3](output_images/006_sliding_3.jpg)
 
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
